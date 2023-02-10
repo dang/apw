@@ -20,7 +20,7 @@ local margin_right  = 0         -- right margin in pixels of progressbar
 local margin_left   = 0         -- left margin in pixels of progressbar
 local margin_top    = 0         -- top margin in pixels of progressbar
 local margin_bottom = 0         -- bottom margin in pixels of progressbar
-local step          = 5      -- stepsize for volume change (ranges from 0 to 100)
+local step          = 0.05      -- stepsize for volume change (ranges from 0 to 1)
 local color         = '#698f1e' -- foreground color of progessbar
 local color_bg      = '#33450f' -- background color
 local color_mute    = '#be2a15' -- foreground color when muted
@@ -32,7 +32,7 @@ local text_color    = '#fff' -- color of text
 -- End of configuration
 
 local awful = require("awful")
-local spawn_with_shell = awful.spawn.with_shell
+local spawn_with_shell = awful.util.spawn_with_shell or awful.spawn.with_shell
 local wibox = require("wibox")
 local beautiful = require("beautiful")
 local pulseaudio = require("apw.pulseaudio")
@@ -50,7 +50,7 @@ local p = pulseaudio:Create()
 local pulseBar = wibox.widget.progressbar()
 
 pulseBar.forced_width = width
-pulseBar.step = step / 100
+pulseBar.step = step
 
 local pulseWidget
 local pulseText
@@ -81,10 +81,10 @@ function pulseWidget.setColor(mute)
 end
 
 local function _update()
-	pulseBar:set_value(p.Volume / 100)
+	pulseBar:set_value(p.Volume)
 	pulseWidget.setColor(p.Mute)
     if show_text then
-        pulseText:set_markup('<span color="'..text_color..'">'..p.Volume..'%</span>')
+        pulseText:set_markup('<span color="'..text_color..'">'..math.ceil(p.Volume*100)..'%</span>')
 
     end
 end
@@ -94,12 +94,12 @@ function pulseWidget.SetMixer(command)
 end
 
 function pulseWidget.Up()
-	p:SetVolume(p.Volume + step)
+	p:SetVolume(p.Volume + pulseBar.step)
 	_update()
 end
 
 function pulseWidget.Down()
-	p:SetVolume(p.Volume - step)
+	p:SetVolume(p.Volume - pulseBar.step)
 	_update()
 end
 

@@ -20,7 +20,7 @@
 local pulseaudio = {}
 
 
-local cmd = "./pactl-volume"
+local cmd = "pacmd"
 local default_sink = ""
 
 function pulseaudio:Create()
@@ -38,7 +38,7 @@ function pulseaudio:Create()
 end
 
 function pulseaudio:UpdateState()
-	local f = io.popen(cmd .. " get-sink")
+	local f = io.popen(cmd .. " dump")
 
 	-- if the cmd cannot be found
 	if f == nil then
@@ -49,7 +49,7 @@ function pulseaudio:UpdateState()
 	f:close()
 
 	-- find default sink
-	default_sink = string.gsub(out, "\n\r", "")
+	default_sink = string.match(out, "set%-default%-sink ([^\n]+)")
 
 	if default_sink == nil then
 		default_sink = ""
@@ -57,20 +57,21 @@ function pulseaudio:UpdateState()
 	end
 
 	-- retrieve volume of default sink
-	f = io.popen(cmd .. " get-volume")
-	out = f:read("*a")
-	f:close()
-	self.Volume = tonumber(out)
+	for sink, value in string.gmatch(out, "set%-sink%-volume ([^%s]+) (0x%x+)") do
+		if sink == default_sink then
+			self.Volume = tonumber(value) / 0x10000
+		end
+	end
 
 	-- retrieve mute state of default sink
 	local m
-	f = io.popen(cmd .. " get-mute")
-	out = f:read("*a")
-	f:close()
-	m = string.gsub(out, "\n", "")
+	for sink, value in string.gmatch(out, "set%-sink%-mute ([^%s]+) (%a+)") do
+		if sink == default_sink then
+			m = value
+		end
+	end
 
 	self.Mute = m == "yes"
-
 end
 
 -- Run process and wait for it to end
@@ -82,16 +83,17 @@ end
 
 -- Sets the volume of the default sink to vol from 0 to 1.
 function pulseaudio:SetVolume(vol)
-	if vol > 100 then
-		vol = 100
+	if vol > 1 then
+		vol = 1
 	end
 
 	if vol < 0 then
 		vol = 0
 	end
 
+	vol = vol * 0x10000
 	-- set…
-	run(cmd .. " set-volume " .. vol)
+	run(cmd .. " set-sink-volume " .. default_sink .. " " .. string.format("0x%x", math.floor(vol)))
 
 	-- …and update values
 	self:UpdateState()
@@ -100,7 +102,11 @@ end
 
 -- Toggles the mute flag of the default default_sink.
 function pulseaudio:ToggleMute()
-		run(cmd .. " set-mute -t")
+	if self.Mute then
+		run(cmd .. " set-sink-mute " .. default_sink .. " 0")
+	else
+		run(cmd .. " set-sink-mute " .. default_sink .. " 1")
+	end
 
 	-- …and updates values.
 	self:UpdateState()
